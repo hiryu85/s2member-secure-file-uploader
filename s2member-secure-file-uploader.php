@@ -2,24 +2,21 @@
 /*
 Plugin Name: s2member Secure-File Uploader
 Plugin URI: http://lewayotte.com/plugins/s2member-secure-file-uploader/
-Description: A plugin for uploading files to the secure-files location of the <a href="http://www.websharks-inc.com/2496-3-3-13.html" target="_blank">s2member WordPress Membership plugin</a>
+Description: A plugin for uploading files to the secure-files location of the <a href="http://www.s2member.com/2496.html" target="_blank">s2member WordPress Membership plugin</a>
 Author: Lew Ayotte
-Version: 0.0.1
+Version: 0.0.2
 Author URI: http://lewayotte.com/
 Tags: s2member, secure, files, downloads, security, enabled
 */
 
-define( 's2sfu_version' , '0.0.1' );
+define( 's2sfu_version' , '0.0.2' );
 
-add_action( 'init', 's2sfu_initialization', 1 );
+add_action( 'admin_init', 's2sfu_initialization', 1 );
 add_action( 'delete_attachment', 'delete_s2sfu_file' );
 
 function s2sfu_initialization() {
 		
-	$active_plugins = get_option( 'active_plugins' );
-	$required_plugin = 's2member/s2member.php';
-
-	if ( in_array( $required_plugin, $active_plugins ) ) {
+	if ( is_plugin_active( 's2member/s2member.php' ) ) {
 		
 		/**/
 		if ( !is_dir( $files_dir = $GLOBALS['WS_PLUGIN__']['s2member']['c']['files_dir'] ) )
@@ -44,7 +41,12 @@ function s2sfu_initialization() {
 
 function s2sfu_media_button( $editor_id = 'content' ) {
 	
-	echo "<a href='" . esc_url( get_upload_iframe_src( 's2sfu' ) ) . "' id='add_s2sfu' class='thickbox add_s2sfu' title='" . __( 'Add s2member Secure-File', 's2sfu' ) . "'><img src='" . plugins_url() . '/' . dirname( plugin_basename( __FILE__ ) ) . "/images/secure_files.gif' alt='" . __( 's2member Secure-File Upload', 's2sfu' ). "' onclick='return false;' /></a>";
+	echo "
+	<a href='" . esc_url( get_upload_iframe_src( 's2sfu' ) ) . "' id='add_s2sfu' class='thickbox add_s2sfu button' title='" . __( 'Add s2member Secure-File', 's2sfu' ) . "'>
+		<img src='" . plugins_url() . '/' . dirname( plugin_basename( __FILE__ ) ) . "/images/secure_files.gif' alt='" . __( 's2member Secure-File Upload', 's2sfu' ). "' onclick='return false;' />
+		". __( 's2member Secure-File Upload', 's2sfu' ) ."
+	</a>
+	";
 	
 }
 
@@ -58,7 +60,15 @@ function s2sfu_media_button( $editor_id = 'content' ) {
  */
 function s2sfu_media_upload_handler() {
 	
-	add_filter( 'media_upload_tabs', '__return_false' );
+
+	add_filter( 'media_upload_tabs', function($_default_tabs) {
+		unset($_default_tabs['type_url']);
+		unset($_default_tabs['gallery']);
+		unset($_default_tabs['library']);
+
+		return $_default_tabs;
+	});
+
 	add_filter( 'upload_dir', 's2sfu_upload_dir' );
 	
 	$errors = array();
@@ -239,7 +249,64 @@ function delete_s2sfu_file( $post_id ) {
 function s2sfu_warning() {
 	
 	echo "
-	<div id='s2sfu-warning' class='updated fade'><p><strong>" . __( 's2member secure-file Uploader is almost ready.' ) . "</strong> " . sprintf( __( 'You must install and activate the <a href="%1$s">s2member WordPress Membership Plugin</a> for it to work.' ), "http://www.websharks-inc.com/2496-3-3-13.html" ) . "</p></div>
+	<div id='s2sfu-warning' class='updated fade'><p><strong>" . __( 's2member secure-file Uploader is almost ready.' ) . "</strong> " . sprintf( __( 'You must install and activate the <a href="%1$s">s2member WordPress Membership Plugin</a> for it to work.' ), "http://www.s2member.com/2496.html" ) . "</p></div>
 	";
 	
 }
+
+
+
+
+function custom_media_upload_tab_name( $tabs ) {
+    $newtab = array( 's2member_files_archive' => __('Protected files') );
+    return array_merge( $tabs, $newtab );
+}
+
+
+function custom_media_upload_tab_content() {
+	add_filter( 'media_upload_tabs', function($_default_tabs) {
+		unset($_default_tabs['type_url']);
+		unset($_default_tabs['gallery']);
+		unset($_default_tabs['library']);
+
+		return $_default_tabs;
+	});
+
+	wp_enqueue_style('media');
+	media_upload_header();
+
+	wp_iframe( 's2member_show_files' );
+}
+
+function s2member_show_files() {
+	$path  = WP_PLUGIN_DIR. '/s2member-files';
+	$files = glob($path . '/*.{mp3,mp4,avi,mpeg,doc,docx,pdf,txt}', GLOB_BRACE);
+	$html  = '<h3>' .$path. '</h3> <form action="" id="s2member-files-archive-form">';
+
+	foreach ($files as $i => $file) {
+		$html .= '<input type="checkbox" data-filename="' .basename($file). '" class="file" name="file[]" />';
+		$html .= basename($file);
+	}
+
+	$html .= '
+		<br />
+		<br />
+		<button type="button" onclick="javascript:s2member_files_archive_selection();">'. esc_attr(__('Link selected files')) .'</button>
+		<script>
+		function s2member_files_archive_selection() {
+			jQuery("#s2member-files-archive-form").find("input[type=checkbox]:checked").each(function(index, el) {
+				var $check = jQuery(el);
+				parent.send_to_editor(\'[s2File download="\' +$check.data("filename")+ \'" /]\');
+			});
+			
+			parent.tb_remove();
+		}
+		</script>
+	</form>
+	';
+    echo $html;
+}
+
+
+add_filter( 'media_upload_tabs', 'custom_media_upload_tab_name' );
+add_action( 'media_upload_s2member_files_archive', 'custom_media_upload_tab_content' );
